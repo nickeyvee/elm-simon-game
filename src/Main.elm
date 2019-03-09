@@ -1,9 +1,11 @@
 import Browser
 import Platform
-import Css exposing (display)
-import Html exposing (Html, h1, button, div, text, ul, li)
+import Css exposing (..)
+import Html.Styled exposing (..)
+-- import Html exposing (Html, h1, button, div, text, ul, li)
 import Html.Styled.Attributes exposing (css, href)
-import Html.Events exposing (onClick)
+-- import Html.Styled.toUnstyled
+import Html.Styled.Events exposing (onClick)
 import Process exposing (sleep)
 import Random exposing (int, initialSeed, generate)
 import Tuple exposing (..)
@@ -14,7 +16,7 @@ main =
   Browser.element
     { init = init
     , update = update
-    , view = view
+    , view = view >> toUnstyled
     , subscriptions = subscriptions
     }
 
@@ -27,7 +29,7 @@ type alias Model =
     , time : Time.Posix
     , random : String
     , current : String
-    , running : Bool
+    , displaySequence : Bool
     , nextLevel : Bool
     , sequence : List String
     , playerSequence: List String
@@ -46,7 +48,7 @@ init _ =
   , length = 0
   , zone = Time.utc
   , time = Time.millisToPosix 0
-  , running = False
+  , displaySequence = False
   , nextLevel = False
   , current = "0"
   , sequence = []
@@ -67,10 +69,10 @@ init _ =
 
 
 type Msg = TogglePower
+    | StartGame
     | StartSequence
     | ClearSequence
     | NextTick Time.Posix
-    | RunGenerator
     | TileSelected String
     | NextLevel Int
     | LoopSequence Time.Posix
@@ -88,6 +90,7 @@ update msg model =
             if lastItem model && string == tile then
               { model | current = string,
                 sequenceCopy = dropFirst model,
+                displaySequence = True,
                 nextLevel = True
               }
             else if string == tile then
@@ -95,7 +98,7 @@ update msg model =
                 sequenceCopy = dropFirst model
               }            
             else
-              { model |
+              { model | displaySequence = True,
                 sequenceCopy = model.sequence
               }
           Nothing ->
@@ -108,7 +111,7 @@ update msg model =
       )
     StartSequence ->
       ( { model |
-        running = not model.running,
+        displaySequence = not model.displaySequence,
         length = model.length + 1
       }
       , Cmd.none
@@ -132,8 +135,8 @@ update msg model =
       ( { model | power = not model.power }
       , Cmd.none
       )
-    RunGenerator ->
-      ( model
+    StartGame ->
+      ( { model | nextLevel = True, displaySequence = True }
       , Random.generate NextLevel (Random.int 0 3)
       )
     SaveRandom val -> 
@@ -151,14 +154,15 @@ update msg model =
             }
           Nothing ->
             { model |
-              sequenceCopy = List.reverse model.sequence,
-              running = False
+              sequenceCopy = model.sequence,
+              displaySequence = False
             }
       , Cmd.none
       )
     NextLevel val ->
       ( String.fromInt val
-        |> (\a -> a :: model.sequence)
+        |> (\a -> a :: (List.reverse model.sequence))
+        |> List.reverse
         |> (\list -> { model |
           nextLevel = False,
           sequence = list,
@@ -178,40 +182,128 @@ lastItem model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    if model.running then
+    if model.displaySequence then
       Time.every 1000 LoopSequence
     else if model.nextLevel then
-      Time.every 2000 NextTick
+      Time.every 0 NextTick
     else
       Sub.none
 
+
+
+-- buttons : Model -> Html.Styled Msg
+-- button buttons =
+--   div [] buttons
 
 
 view : Model -> Html Msg
 view model =
   div []
     [ div [] [ text (onOrOff model.power) ]
-    , button [ onClick StartSequence ] [ text (startStop model.running)]
+    , button [ onClick StartSequence ] [ text (startStop model.displaySequence)]
     , button [ onClick TogglePower ] [ text (onOrOff model.power) ]
-    -- , button [ onClick LoopSequence ] [ text "Loop Through Sequence" ]
-    , button [ onClick RunGenerator ] [ text "Simon Says"]
+    , button [ onClick StartGame ] [ text "Start Game" ]
+    -- , button [ onClick RunGenerator ] [ text "Simon Says"]
     , button [ onClick ClearSequence ] [ text "Clear Sequence"]
     , h1 [] [ text model.current ]
     , div [] [ text "Sequence Source"]
     , div [] [ sequenceTags model.sequence ]
     , div [] [ text "Sequence Copy"]
     , div [] [ sequenceTags model.sequenceCopy ]
-    -- , div [] [ text ]
-    , div [] [ text (humanTime model) ]
-    , div []
-        [ button [ onClick (TileSelected "0") ] [ text "green" ]
-        , button [ onClick (TileSelected "1") ] [ text "red" ]
-        , button [ onClick (TileSelected "2") ] [ text "yellow" ]
-        , button [ onClick (TileSelected "3") ] [ text "blue" ]
-        ]
+    , circleChasis [
+          div [ css
+            [ display block
+            , borderRadius (px 500)
+            , position relative
+            , overflow hidden
+            , margin auto
+            , height (px 420)
+            , width (px 420)
+            ]
+          ]
+          [ controlPanel
+              [ div [ css
+                  [ width (px 175)
+                  , margin (px 17)
+                  , height (px 175)
+                  , borderRadius (px 500)
+                  , backgroundColor (hex "#ffffff")
+                  ]
+              ] []
+            ]
+          , simonRow
+              [ simonTile "1" "00A74A"
+              , simonTile "2" "9F0F17"
+              ]
+          , simonRow
+              [ simonTile "3" "CCA707"
+              , simonTile "4" "094A8F"
+              ]          
+          ]
+          , div [ css
+              [ position absolute
+              , borderRadius (px 100)
+              ]
+            ] []
+        ] 
     ]
 
 
+controlPanel : List (Html Msg) -> Html Msg
+controlPanel element =
+    div [ css
+          [ position absolute
+          , width (px 210)
+          , height (px 210)
+          , top (px 100)
+          , left (px 105)
+          , margin auto
+          , display block
+          , borderRadius (px 500)
+          , backgroundColor (hex "#333333")
+          ]
+        ] element
+
+
+circleChasis : List (Html Msg) -> Html Msg
+circleChasis element =
+    div [ css
+          [ position relative
+          , padding (px 18)
+          , display block
+          , borderRadius (px 500)
+          , backgroundColor (hex "#333333")
+          , width (px 420)
+          , height (px 420)
+          ]
+        ] element
+
+
+simonTile : String -> String -> Html Msg
+simonTile index color =
+    button [ css
+        [ width (px 200)
+        , border (px 0)
+        , height (px 200)
+        , display block
+        , padding (px 0)
+        , outline none
+        , backgroundColor (hex color)
+        ]
+        , onClick (TileSelected index)
+        ] [ ]
+
+
+simonRow : List (Html Msg) -> Html Msg
+simonRow elements =
+    div [ css
+          [ Css.displayFlex
+          , flexWrap wrap
+          , height (px 200)
+          , justifyContent spaceBetween
+          , marginBottom (px 20)
+          ]
+        ] elements
 
 
 dropFirst : Model -> List String
